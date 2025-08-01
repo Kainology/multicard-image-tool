@@ -66,7 +66,7 @@ if uploaded_file:
                     image_bytes = f.read()
                 
                 # Hiển thị ảnh đúng kích thước gốc
-                st.image(image_bytes, caption=f"{name} ({group_size} ảnh) [Kích thước gốc]", use_column_width=False)
+                st.image(image_bytes, caption=f"{name} ({group_size} ảnh) [Kích thước gốc]", use_container_width=False)
                 
                 # Nút download từng ảnh
                 st.download_button(
