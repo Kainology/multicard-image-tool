@@ -18,7 +18,6 @@ def merge_images(urls, output_name, group_size):
     output_width, output_height = 410, 336
     canvas = Image.new("RGBA", (output_width, output_height), (0, 0, 0, 0))
 
-    # Xác định vị trí từng ảnh
     if group_size == 2:
         positions = [0, 200]
     elif group_size == 3:
@@ -28,7 +27,7 @@ def merge_images(urls, output_name, group_size):
     else:
         raise ValueError("Chỉ hỗ trợ nhóm 2, 3 hoặc 4 ảnh")
 
-    # Dán ảnh từ phải qua trái
+    # Dán ảnh từ phải qua trái (để A ở trên cùng)
     for i in reversed(range(group_size)):
         img = resize_card(load_image_from_url(urls[i]))
         canvas.paste(img, (positions[i], 0), img)
@@ -37,52 +36,61 @@ def merge_images(urls, output_name, group_size):
     canvas.save(filename)
     return filename
 
-st.title("🧩 Tool Ghép Ảnh MULTICARD (2 - 3 - 4 ảnh)")
+st.title("🧩 Tool Ghép Ảnh MULTICARD (Tự động nhóm, download từng ảnh hoặc tất cả)")
 
-# B1: Chọn số lượng ảnh mỗi nhóm
-group_size = st.selectbox("🔢 Chọn số ảnh trong mỗi nhóm:", [2, 3, 4])
-
-# B2: Upload CSV
 uploaded_file = st.file_uploader("📎 Tải lên file CSV (2 cột: tên, url)", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
-    if len(df) % group_size != 0:
-        st.error(f"❌ Số dòng phải chia hết cho {group_size}.")
-    elif df.shape[1] < 2:
+    if df.shape[1] < 2:
         st.error("❌ File CSV phải có ít nhất 2 cột: tên và url")
     else:
         result_files = []
-        for i in range(0, len(df), group_size):
-            group = df.iloc[i:i+group_size]
-            name = str(group.iloc[0, 0])
+        error_groups = []
+
+        # Nhóm theo 'tên'
+        grouped = df.groupby(df.columns[0])
+
+        for name, group in grouped:
             urls = [u.strip() for u in group.iloc[:, 1].tolist()]
+            group_size = len(urls)
+            if group_size not in [2, 3, 4]:
+                error_groups.append((name, group_size))
+                continue
             try:
-                result_file = merge_images(urls, name, group_size)
+                result_file = merge_images(urls, str(name), group_size)
                 result_files.append(result_file)
-
-                # ✅ Hiển thị ảnh với kích thước thật
-                st.image(Image.open(result_file), caption=name)
-
-                # ✅ Tải riêng từng ảnh
-                with open(result_file, "rb") as img_file:
-                    st.download_button("📥 Tải ảnh này", img_file, file_name=result_file, mime="image/png")
-
+                
+                # Đọc file ảnh vào bytes
+                with open(result_file, "rb") as f:
+                    image_bytes = f.read()
+                
+                # Hiển thị ảnh đúng kích thước gốc
+                st.image(image_bytes, caption=f"{name} ({group_size} ảnh) [Kích thước gốc]", use_column_width=False)
+                
+                # Nút download từng ảnh
+                st.download_button(
+                    label="📥 Tải ảnh này",
+                    data=image_bytes,
+                    file_name=f"{name}.png",
+                    mime="image/png"
+                )
             except Exception as e:
                 st.error(f"Lỗi khi xử lý nhóm {name}: {e}")
 
-        # ✅ Nén ZIP nếu có nhiều ảnh
+        if error_groups:
+            error_text = ", ".join([f"{n} ({sz} ảnh)" for n, sz in error_groups])
+            st.warning(f"Có nhóm không hợp lệ (chỉ hỗ trợ 2, 3, 4 ảnh): {error_text}")
+
+        # Nén kết quả
         if result_files:
-            zip_filename = f"merged_images_{group_size}cards.zip"
+            zip_filename = "merged_images.zip"
             with zipfile.ZipFile(zip_filename, 'w') as zipf:
                 for file in result_files:
                     zipf.write(file)
-
             with open(zip_filename, "rb") as f:
                 st.download_button("📦 Tải tất cả ảnh dưới dạng ZIP", f, file_name=zip_filename)
-
-            # Cleanup (tùy chọn)
+            # Xóa file tạm
             for file in result_files:
                 os.remove(file)
             os.remove(zip_filename)
