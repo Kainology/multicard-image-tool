@@ -2,13 +2,21 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 import requests
+import urllib3
 from io import BytesIO
 import zipfile
 import os
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 def load_image_from_url(url):
-    response = requests.get(url)
-    response.raise_for_status()
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+    except requests.exceptions.SSLError:
+        # Retry without certificate verification only when the SSL handshake fails.
+        response = requests.get(url, timeout=20, verify=False)
+        response.raise_for_status()
     return Image.open(BytesIO(response.content)).convert("RGBA")
 
 def resize_card(img, width=210, height=336):
